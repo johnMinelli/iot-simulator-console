@@ -5,29 +5,24 @@ LABEL maintainer="Jens Reimann <jreimann@redhat.com>"
 
 EXPOSE 8080
 
-ENV \
-    GOPATH=/go
-
-RUN mkdir -p /go/src/github.com/ctron
-ADD . /go/src/github.com/ctron/iot-simulator-console
+RUN mkdir -p /console
+ADD . /console/iot-simulator-console
 
 RUN \
     yum -y update && \
     yum -y install epel-release && \
     curl -sL https://rpm.nodesource.com/setup_10.x | bash -  && \
-    yum -y install golang nodejs gcc-c++ make && \
-    go version && \
+    yum -y install nodejs gcc-c++ make && \
     node --version && \
-    cd /go/src/github.com/ctron/iot-simulator-console && \
+    cd /console/iot-simulator-console && \
+    npm install serve && \
     npm install && \
     npm run build && \
-    cd cmd && \
-    go build -o /iot-simulator-console . && \
-    cd .. && \
+#    cd cmd && \
+#    go build -o /iot-simulator-console . && \
+#    cd .. && \
     mv build / && \
-    echo "Clean up" && \
-    rm -Rf go && \
-    yum -y history undo last && yum -y clean all && \
+#    echo "Clean up" && \
+#    rm -Rf go && \
+#    yum -y history undo last && yum -y clean all && \
     true
-
-ENTRYPOINT /iot-simulator-console

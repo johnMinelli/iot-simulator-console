@@ -15,6 +15,15 @@
 .chart-overflow svg {
     overflow: visible;
 }
+CheckIcon {
+    background: green;
+}
+ExclamationTriangleIcon {
+    background: #ffd600;
+}
+CloseIcon{
+    background: red;
+}
 
 li.good {
 }

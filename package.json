@@ -1,6 +1,7 @@
 {
   "private": true,
   "dependencies": {
+    "@material-ui/core": "^4.9.0",
     "@patternfly/react-charts": "^2.2.3",
     "@patternfly/react-core": "^2.10.9",
     "@patternfly/react-icons": "^3.7.1",
@@ -8,6 +9,7 @@
     "jquery": "^3.4.0",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
+    "react-timestamp": "^5.1.0",
     "redux": "^3"
   },
   "devDependencies": {
@@ -17,7 +19,7 @@
     "babel-preset-react-app": "^3"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "PORT=8080 react-scripts start",
     "build": "react-scripts build"
   },
   "browserslist": [

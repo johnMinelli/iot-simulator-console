@@ -13,7 +13,7 @@
 
 package handler
 
-import (
+import 	(
 	"github.com/ctron/iot-simulator-console/pkg/data"
 	"github.com/ctron/iot-simulator-console/pkg/metrics"
 	"github.com/ctron/operator-tools/pkg/install/openshift"

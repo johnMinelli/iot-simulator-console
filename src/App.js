@@ -1,5 +1,8 @@
 import React from "react";
 
+import Timestamp from "react-timestamp";
+import { InputBase } from '@material-ui/core';
+
 import {
     BackgroundImage, BackgroundImageSrc,
     Page, PageHeader, PageSection,
@@ -13,7 +16,7 @@ import {
 } from "@patternfly/react-charts";
 
 import {
-    CubesIcon, AngleDoubleDownIcon, AngleDoubleUpIcon, ClockIcon, ExclamationTriangleIcon,
+    CubesIcon, StreamIcon, AngleDoubleDownIcon, AngleDoubleUpIcon, ClockIcon, ExclamationTriangleIcon, CheckIcon, CloseIcon,
     CogsIcon,
 } from '@patternfly/react-icons';
 
@@ -27,8 +30,12 @@ import backgroundSm2x from "./assets/images/background_768@2x.jpg"
 import backgroundXs2x from "./assets/images/background_576@2x.jpg"
 
 import backgroundFilter from "./assets/images/background-filter.svg"
+const OFFLINE = 0;
+const ONLINE = 1;
+const WARNING = 2;
 
 class App extends React.Component {
+
 
     render() {
         const background = {
@@ -68,7 +75,7 @@ class HistoryChart extends React.Component {
 
     componentDidMount() {
         setTimeout(() => {
-            this.setState({width: this.containerRef.current.clientWidth});
+            this.setState({width: 500});
             window.addEventListener('resize', this.handleResize);
         });
     }
@@ -94,11 +101,17 @@ class HistoryChart extends React.Component {
             }
         };
 
+        var chartData = [];
+        this.props.data.map(stat=>{
+            chartData.push({name:"value", x:stat.timestamp,y:stat.value});
+            }
+        );
+
         return (
             <div ref={this.containerRef}>
                 <div className="chart-inline chart-overflow">
                     <ChartGroup containerComponent={container} height={75} width={width} padding={{"top": 5}}>
-                        <ChartArea data={this.props.data} style={cs}/>
+                        <ChartArea data={chartData} style={cs}/>
                     </ChartGroup>
                 </div>
             </div>
@@ -111,28 +124,41 @@ class Home extends React.Component {
 
     constructor(props) {
         super(props);
-        this.api = "//" + window.location.host + "/api";
         this.state = {
-            overview: {
-                tenants: []
-            },
+            devices: {},
+            devCount: [],
+            consumerIp: "10.96.25.20",
+            velocityStream: 0
         };
-        this.refreshData();
+
+        this.staticVelocityStream = 0;
+
+            this.refreshData = this.refreshData.bind(this);
+
+        this.refreshData(null);
     }
 
-    refreshData() {
-        fetch(this.api + "/overview")
+    refreshData(event) {
+        const o = this;
+        var onChangedIpValue = event?event.target.value:null;
+        var api = "//" + (onChangedIpValue ? onChangedIpValue : this.state.consumerIp ? this.state.consumerIp : window.location.host).replace(RegExp(":.*"),"")+ ":8080" + "/api";
+        console.debug(api);
+        fetch(api + "/overview")
             .then(result => {
                 return result.json()
             })
-            .then(data => {
-                console.log(data);
-                this.setState({overview: data});
+            .then(result => {
+                o.staticVelocityStream = 0;
+                onChangedIpValue?
+                    o.setState({
+                        consumerIp: onChangedIpValue, overview: result.data})
+                    :
+                    o.setState({overview: result.data});
             })
     }
 
     componentDidMount() {
-        this.interval = setInterval(() => this.refreshData(), 1000);
+        this.interval = setInterval(() => this.refreshData(null), 1000);
     }
 
     componentWillUnmount() {
@@ -146,60 +172,39 @@ class Home extends React.Component {
         return n.toFixed(fractionDigits)
     }
 
-    renderConsumers(tenant) {
-        if (tenant.consumers == null) {
-            return
-        }
+    renderConsumer() {
 
         const o = this;
 
-        return tenant.consumers.map(function (consumer, i) {
-            return (
-                <DataListItem className={Home.stateClassName(consumer)}>
-                    <DataListCell>
-                        {consumer.type}
+        var numDevice=Object.keys(this.state.devices).length;
+
+        return (
+            <DataListItem className="good">
+                <DataListCell>
+                    <form>
+                        <InputBase
+                            className={Home.stateClassName(o.state.consumerIp)}
+                            defaultValue={o.state.consumerIp}
+                            onChange={o.refreshData}
+                        />
+                    </form>
+                </DataListCell>
+                <DataListCell>
+                    <CubesIcon/>&nbsp;<strong>{Home.value(numDevice, "Producer", "Producers")}</strong>
+                </DataListCell>
+                <DataListCell>
+                    <AngleDoubleDownIcon/>&nbsp;
+                    <strong title="msgs/s" data-toggle="tooltip" data-placement="top">
+                        {o.renderSingleValueBy((numDevice==0 || numDevice==(this.state.devCount[OFFLINE]+this.state.devCount[WARNING]))?0:this.state.velocityStream,3, "msgs/s")}&nbsp;
+                    </strong>                </DataListCell>
+                    <DataListCell className="chart-cell">
+                        {numDevice==0?"":o.renderConnectionChart()}
                     </DataListCell>
-                    <DataListCell>
-                        <CubesIcon/>&nbsp;<strong>{Home.value(consumer.replicas, "Pod", "Pods")}</strong>
-                    </DataListCell>
-                    <DataListCell>
-                        <AngleDoubleDownIcon/>&nbsp;
-                        <strong title="msgs/s" data-toggle="tooltip" data-placement="top">
-                            {o.renderSingleValue(consumer.messagesPerSecond, "msgs/s")}&nbsp;/&nbsp;
-                            {o.renderSingleValueBy(consumer.payloadPerSecond, 1.0 / 1024.0, 1, "KiB/s")}
-                        </strong>
-                    </DataListCell>
-                    <DataListCell className="chart-cell" width={2}>
-                        <HistoryChart data={consumer.messagesHistory}/>
-                    </DataListCell>
-                </DataListItem>
-            )
-        })
+            </DataListItem>
+        )
     }
 
-    renderErrorChart(producer) {
-        return (<div className="chart-inline">
-            <div>
-                <ChartPie
-                    animate={{duration: 500}}
-                    containerComponent={<ChartContainer responsive={false}/>}
-                    labels={datum => `${datum.x}: ${Home.fixedNumber(datum.y, 0)}`}
-                    height={80} width={80}
-                    padding={10}
-                    data={producer.chartData}
-                />
-            </div>
-            <ChartLegend
-                orientation={"vertical"}
-                data={producer.chartLegend}
-                rowGutter={-8} gutter={20}
-                itemsPerRow={2}
-                height={80} width={200}
-            />
-        </div>)
-    }
-
-    renderConnectionChart(producer) {
+    renderConnectionChart() {
         return (<div className="chart-inline">
             <div>
                 <ChartPie
@@ -209,112 +214,173 @@ class Home extends React.Component {
                     height={80} width={80}
                     padding={10}
                     data={[
-                        {"x": "connected", "y": producer.connectionsEstablished},
-                        {"x": "disconnected", "y": producer.connectionsConfigured - producer.connectionsEstablished},
+                        {"x": "online", "y": this.state.devCount[ONLINE]||0},
+                        {"x": "warning", "y": this.state.devCount[WARNING]||0},
+                        {"x": "offline", "y": this.state.devCount[OFFLINE]||0},
                     ]}
                 />
             </div>
             <ChartLegend
                 orientation={"vertical"}
-                data={[{"name": "connected"}, {"name": "disconnected"}]}
+                data={[{"name": "online"}, {"name": "warning"}, {"name": "offline"}]}
                 rowGutter={-8} gutter={20}
-                itemsPerRow={2}
+                itemsPerRow={3}
                 height={80} width={200}
             />
         </div>)
     }
 
-    renderSingleValue(value, tooltip) {
-        return this.renderSingleValueBy(value, 1, 0, tooltip);
-    }
-
-    renderSingleValueBy(value, factor, fractionDigits, tooltip) {
+    renderSingleValueBy(value, fractionDigits, tooltip) {
         return (<span
             title={tooltip} data-toggle="tooltip"
             data-placement="top">
-            {(value != null) ? (value * factor).toFixed(fractionDigits) : "␀"}
+            {(value != null) ? (value != 0) ? (value).toFixed(fractionDigits) : 0 : "␀"}
         </span>)
-    }
-
-    static stateClassName(common) {
-        return common.good ? "good" : "failed";
     }
 
     static value(value, singular, plural) {
         return (value + " " + ((value === 1) ? singular : plural));
     }
 
-    renderRtt(producer) {
-        if (producer.protocol === "http") {
-            return (<span> {" / "} {this.renderSingleValueBy(producer.roundTripTime, 1.0, 1, "rtt (ms)")}</span>)
-        } else {
-            return null
-        }
-    }
-
-    renderProducers(tenant) {
+    renderProducer(resource) {
 
         const o = this;
 
-        if (tenant.producers == null) {
+        if (resource['device'] == null) {
             return
         }
-        return tenant.producers.map(function (producer, i) {
-            return (
-                <DataListItem className={Home.stateClassName(producer) + " chart-list"}>
-                    <DataListCell>
-                        {producer.type + " / " + producer.protocol}
-                    </DataListCell>
-                    <DataListCell>
-                        <CubesIcon/>&nbsp;
-                        <strong>{Home.value(producer.replicas, "Pod", "Pods")}</strong>
-                        {" × "}
-                        <strong>{Home.value(producer.devicesPerInstance, "Device", "Devices")}</strong>
-                    </DataListCell>
-                    <DataListCell>
-                        <AngleDoubleUpIcon/>&nbsp;
-                        <strong>
-                            {o.renderSingleValue(producer.messagesPerSecondSent, "msgs/s")}
-                            {o.renderRtt(producer)}
-                        </strong>
-                    </DataListCell>
-                    <DataListCell>
-                        <ClockIcon/>&nbsp;
-                        <strong>
-                            {o.renderSingleValue(producer.messagesPerSecondConfigured, "msgs/s configured")}&nbsp;→&nbsp;
-                            {o.renderSingleValue(producer.messagesPerSecondScheduled, "msgs/s scheduled")}
-                        </strong>
-                    </DataListCell>
-                    {producer.protocol === "mqtt" ?
-                        <DataListCell className="chart-cell">
-                            {o.renderConnectionChart(producer)}
-                        </DataListCell>
-                        :
-                        <DataListCell className="chart-cell">
-                            {producer.chartData != null && producer.chartLegend != null ? o.renderErrorChart(producer) : ""}
-                        </DataListCell>
-                    }
-                </DataListItem>
-            );
+        if(resource.status=="online" && this.state.devices[resource.device] != ONLINE){
+            this.state.devCount[this.state.devices[resource.device]]--;
+            this.state.devices[resource.device] = ONLINE;
+            this.state.devCount[ONLINE] = (this.state.devCount[ONLINE]||0)+1
+            //if someone online no need to refresh state because will renderspeed
+        } else if(resource.status=="warning" && this.state.devices[resource.device] != WARNING){
+            this.state.devCount[this.state.devices[resource.device]]--;
+            this.state.devices[resource.device] = WARNING;
+            this.state.devCount[WARNING] = (this.state.devCount[WARNING]||0)+1
+            //if someone warning no need to refresh state because will renderspeed
+        } else if(resource.status=="offline" && this.state.devices[resource.device] != OFFLINE){
+            this.state.devCount[this.state.devices[resource.device]]--;
+            this.state.devices[resource.device] = OFFLINE;
+            this.state.devCount[OFFLINE] = (this.state.devCount[OFFLINE]||0)+1
+            this.setState({});
+        } else if(resource.status=="disconnect" && this.state.devices[resource.device] != null){
+            this.state.devCount[this.state.devices[resource.device]]--;
+            delete this.state.devices[resource.device];
+            this.setState({}); return ;
+        }
+        return (
+            <DataListItem className={Home.stateClassName(resource) + " chart-list"}>
+                <DataListCell>
+                    {resource['device']}
+                </DataListCell>
+                <DataListCell>
+                    <StreamIcon/>&nbsp;
+                    <strong>{resource['type']}</strong>
+                </DataListCell>
+                <DataListCell>
+                    <AngleDoubleUpIcon/>&nbsp;
+                    <strong>
+                        {(resource['status']=="online"||resource['status']=="warning")?
+                            o.renderSpeed(resource):""}
+                    </strong>
+                </DataListCell>
+                <DataListCell>
+                    {(resource['status']=="online")?<CheckIcon color="green"/>:(resource['status']=="warning")?<ExclamationTriangleIcon color="#ffd600"/>:<CloseIcon color="red"/>}&nbsp;
+                    <strong>
+                        {(resource['status']=="online"||resource['status']=="warning")?
+                            <Timestamp date={resource.lasttimestamp/1000} />
+                            :
+                            ["Last seen: ",<Timestamp relative date={resource.lasttimestamp/1000} />]}
+                    </strong>
+                </DataListCell>
+                <DataListCell className="chart-cell" width={2}>
+                    <HistoryChart data={resource.data}/>
+                </DataListCell>
+            </DataListItem>
+        );
+    }
+
+    renderSpeed(resource) {
+        if(resource.velocity==null){
+            var lastIndex = resource.data.length-1;
+            var i = 0;
+            var mex = 0;
+            for(;resource.data[lastIndex-i]>=resource.data[lastIndex]&&i!=lastIndex;i++){mex++}
+            var beforeLastIndex = lastIndex-i;
+            if(lastIndex == beforeLastIndex)
+                return this.renderSingleValueBy(0,0,"Initializing..");
+            else if(resource.data[lastIndex].timestamp-resource.data[beforeLastIndex].timestamp==0) {
+                resource.velocity=resource.data.length+" (MAX)";
+                this.staticVelocityStream+=resource.data.length;
+                this.setState({velocityStream:resource.data.length})
+                return this.renderSingleValueBy(resource.data.length, 0, "msgs/s (MAX)");   //useless?
+            }else{
+                var velocity = mex / ((resource.data[lastIndex].timestamp-resource.data[beforeLastIndex].timestamp)/1000);
+                resource.velocity=velocity;
+                this.staticVelocityStream+=velocity;
+                if(!isNaN(this.state.velocityStream))this.setState({velocityStream: this.staticVelocityStream});
+                return this.renderSingleValueBy(velocity,3,"msgs/s");   //useless?
+            }
+        }else
+            return this.renderSingleValueBy(resource.velocity,3,"msgs/s");
+    }
+
+    static stateClassName(common) {
+        return common.good ? "good" : "failed";
+    }
+
+    renderAllProd(data){
+        const o = this;
+
+        var type = "";
+        var tenant = "";
+        return data.map(resource=>{
+            if(resource['type'] != type || resource['tenant'] != tenant){
+                type = resource['type'];
+                tenant = resource['tenant'];
+                return(
+                    <div>
+                        <Title size="3xl">{tenant}</Title>
+                        <DataList aria-label="List of all consumers">
+                            {o.renderProducer(resource)}
+                        </DataList>
+                    </div>
+                );
+            }else{
+                return(
+                    <DataList aria-label="List of all consumers">
+                        {o.renderProducer(resource)}
+                    </DataList>
+                );
+            }
         })
+    }
+
+    sortByKey(jsObj){
+        var sortedArray = [];
+        for(var i in jsObj)
+            sortedArray.push(jsObj[i]);
+        return sortedArray.sort();
     }
 
     render() {
         const o = this;
+
+        //sort
+        var data = this.state.overview;
+        if(data!=null)data=o.sortByKey(data);
         return (
             <div>
-                {
-                    this.state.overview.tenants.map(function (tenant, i) {
-                        return (
-                            <div>
-                                <Title size="3xl">{tenant.name}</Title>
-                                <DataList aria-label="List of all producers and consumers">
-                                    {o.renderConsumers(tenant)}
-                                    {o.renderProducers(tenant)}
-                                </DataList>
-                            </div>
-                        )
-                    })
+                <div>
+                    <DataList aria-label="consumer">
+                        {o.renderConsumer()}
+                    </DataList>
+                </div>
+                {(data!=null && data!={})?
+                    o.renderAllProd(data)
+                :
+                    <div><Title size="3xl">Nothing to consume</Title></div>
                 }
             </div>
         );
