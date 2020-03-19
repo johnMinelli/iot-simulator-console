@@ -1,0 +1,19 @@
+minikube service hono-service-device-registry-ext --url -n hono
+minikube start
+minikube dashboard
+minikube tunnel
+kubectl get service -n hono
+kubectl describe services hono-adapter-kura
+
+--intall--
+kubectl create namespace hono
+cd eclipse-hono.1.0.1
+kubectl config set-context $(kubectl config current-context) --namespace=hono
+export REGISTRY_IP=$(kubectl get service hono-service-device-registry-ext --output='jsonpath={.status.loadBalancer.ingress[0].ip}' -n hono)
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install hono-metrics bitnami/influxdb --namespace hono
+
+
+
+
